@@ -9,6 +9,7 @@ import { getTestResultsFolder } from '@salesforce/salesforcedx-utils-vscode';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/lib/main';
+import ApexLSPStatusBarItem from './apexLspStatusBarItem';
 import { CodeCoverage, StatusBarToggle } from './codecoverage';
 import {
   forceAnonApexDebug,
@@ -46,6 +47,7 @@ let languageClient: LanguageClient | undefined;
 
 export async function activate(extensionContext: vscode.ExtensionContext) {
   const extensionHRStart = process.hrtime();
+  const languageServerStatusBarItem = new ApexLSPStatusBarItem();
   const testOutlineProvider = getTestOutlineProvider();
   if (vscode.workspace && vscode.workspace.workspaceFolders) {
     const apexDirPath = getTestResultsFolder(
@@ -98,11 +100,11 @@ export async function activate(extensionContext: vscode.ExtensionContext) {
         if (languageClient) {
           languageClient.onNotification('indexer/done', async () => {
             await getTestOutlineProvider().refresh();
+            languageServerStatusBarItem.ready();
+
+            languageClientUtils.setStatus(ClientStatus.Ready, '');
           });
         }
-        // TODO: This currently keeps existing behavior in which we set the language
-        // server to ready before it finishes indexing. We'll evaluate this in the future.
-        languageClientUtils.setStatus(ClientStatus.Ready, '');
         const startTime = telemetryService.getEndHRTime(langClientHRStart);
         telemetryService.sendEventData('apexLSPStartup', undefined, {
           activationTime: startTime
@@ -115,10 +117,17 @@ export async function activate(extensionContext: vscode.ExtensionContext) {
           ClientStatus.Error,
           nls.localize('apex_language_server_failed_activate')
         );
+        languageServerStatusBarItem.error(
+          `${nls.localize('apex_language_server_failed_activate')} - ${
+            err.message
+          }`
+        );
       });
   } catch (e) {
-    console.error('Apex language server failed to initialize');
     languageClientUtils.setStatus(ClientStatus.Error, e);
+    languageServerStatusBarItem.error(
+      `${nls.localize('apex_language_server_failed_activate')} - ${e.message}`
+    );
   }
 
   // Javadoc support
